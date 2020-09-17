@@ -28,8 +28,8 @@ class MultipleNetwork(nn.Module):
         self.criticModule = CriticModule(num_state, action_space, device, hidden_size = input_size)
         self.actorModule= ActorModule(num_state, action_space, device, hidden_size = input_size)
         self.is_image = is_image
-        self.action_high = 1.5
-        self.action_low = -1.5
+        self.action_high = 1-1e-8
+        self.action_low = -(1-1e-8)
         
     def forward(self, state):
         if self.is_image:

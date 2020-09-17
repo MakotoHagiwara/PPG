@@ -93,7 +93,7 @@ class PpgAgent:
             log_pis_batch = batch['log_pis'].to(self.device)
             
             values = self.critic(state_batch)
-        targets, advantages = util.calculate_advantage(values, reward_batch, terminate_batch, self.gamma, self.lambda_)
+            targets, advantages = util.calculate_advantage(values, reward_batch, terminate_batch, self.gamma, self.lambda_)
         for j in range(self.num_updates):
             for i in range(max(self.policy_epoch, self.value_epoch)):
                 indices = np.arange(self.rollout_length)
@@ -109,8 +109,8 @@ class PpgAgent:
         for _ in range(self.aux_num_updates):
             indices = np.arange(self.rollout_length)
             np.random.shuffle(indices)
-            for start in range(0, self.rollout_length, self.batch_size):
-                idxes = indices[start:start + self.batch_size]
+            for start in range(0, self.rollout_length, self.aux_epoch_batch):
+                idxes = indices[start:start + self.aux_epoch_batch]
                 self.update_actor_Auxiliary(state_batch[idxes], action_batch[idxes], log_pis_old[idxes], targets[idxes], advantages[idxes])
                 self.update_critic_Auxiliary(state_batch[idxes], targets[idxes])
         self.multipleNet.eval()
@@ -119,6 +119,7 @@ class PpgAgent:
     def update_actor_Auxiliary(self, states, actions, log_pis_old, targets, advantages):
         loss_critic = (self.multipleNet.q_forward(states) - targets).pow_(2).mean()
         log_pis = self.multipleNet.evaluate_log_pi(states, actions)
+        log_pis = torch.clamp(log_pis, max = 10, min = -10)
         ratios = (log_pis - log_pis_old).exp_()
         loss_a1 = -ratios * advantages
         loss_a2 = -torch.clamp(
@@ -154,6 +155,7 @@ class PpgAgent:
 
     def update_MultipleNet(self, states, actions, log_pis_old, advantages):
         log_pis = self.multipleNet.evaluate_log_pi(states, actions)
+        log_pis = torch.clamp(log_pis, max = 10, min = -10)
         if self.update_step % 50 == 0:
             print("log_pis:", log_pis)
         mean_ent = - log_pis.mean()
