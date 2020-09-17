@@ -56,6 +56,12 @@ class MultipleNetwork(nn.Module):
         q = self.criticModule.forward(x)
         return q
     
+    def p_forward(self, state):
+        mean, log_stds, q = self.forward(state)
+        action, log_pis = util.reparameterize(mean, log_stds)
+        action = action * self.action_halfwidth + self.action_mean
+        return action
+    
     def sample(self, state):
         mean, log_stds, q = self.forward(state)
         action, log_pis = util.reparameterize(mean, log_stds)
@@ -65,7 +71,8 @@ class MultipleNetwork(nn.Module):
     def evaluate_log_pi(self, state, actions):
         means, log_stds, q = self.forward(state)
         actions = (actions - self.action_mean) / self.action_halfwidth
-        return util.evaluate_log_pi(means, log_stds, actions)
+        log_pis = util.evaluate_log_pi(means, log_stds, actions)
+        return log_pis
 
 class ActorModule(nn.Module):
     def __init__(self, num_state, action_space, device, hidden_size = 200, is_image = False):

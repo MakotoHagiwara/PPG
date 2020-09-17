@@ -93,7 +93,7 @@ class PpgAgent:
             log_pis_batch = batch['log_pis'].to(self.device)
             
             values = self.critic(state_batch)
-            targets, advantages = util.calculate_advantage(values, reward_batch, terminate_batch, self.gamma, self.lambda_)
+        targets, advantages = util.calculate_advantage(values, reward_batch, terminate_batch, self.gamma, self.lambda_)
         for j in range(self.num_updates):
             for i in range(max(self.policy_epoch, self.value_epoch)):
                 indices = np.arange(self.rollout_length)
@@ -118,22 +118,17 @@ class PpgAgent:
         
     def update_actor_Auxiliary(self, states, actions, log_pis_old, targets, advantages):
         loss_critic = (self.multipleNet.q_forward(states) - targets).pow_(2).mean()
+        loss_bc = (self.multipleNet.p_forward(states) - actions).pow_(2).mean()
         log_pis = self.multipleNet.evaluate_log_pi(states, actions)
-        log_pis = torch.clamp(log_pis, max = 10, min = -10)
-        ratios = (log_pis - log_pis_old).exp_()
-        loss_a1 = -ratios * advantages
-        loss_a2 = -torch.clamp(
-            ratios,
-            1.0 - self.clip_eps,
-            1.0 + self.clip_eps
-        ) * advantages
-        loss_a = torch.max(loss_a1, loss_a2).mean()
-        loss_joint = loss_critic + self.beta_clone * loss_a
+        pis_old = log_pis_old.exp_()
+        kl_loss = (pis_old * (log_pis - log_pis_old)).mean()
+        
+        loss_joint = loss_critic + self.beta_clone * kl_loss
         self.multipleNet_optimizer.zero_grad()
         loss_joint.backward(retain_graph=False)
         self.multipleNet_optimizer.step()
-        #if self.update_step % 50 == 0:
-        #    print("aux actor loss:", loss_joint.item())
+        if self.update_step % 10 == 0:
+            print("aux actor loss:", loss_joint.item())
         
     def update_critic_Auxiliary(self, states, targets):
         loss_critic_aux = (self.critic(states) - targets).pow_(2).mean()
@@ -155,7 +150,6 @@ class PpgAgent:
 
     def update_MultipleNet(self, states, actions, log_pis_old, advantages):
         log_pis = self.multipleNet.evaluate_log_pi(states, actions)
-        log_pis = torch.clamp(log_pis, max = 10, min = -10)
         if self.update_step % 50 == 0:
             print("log_pis:", log_pis)
         mean_ent = - log_pis.mean()
