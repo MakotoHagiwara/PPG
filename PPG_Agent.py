@@ -152,14 +152,14 @@ class PpgAgent:
         n_train_iteration = self.value_epoch * (self.rollout_length // self.batch_size)
         loss_critic = loss_critic / n_train_iteration
         self.writer.add_scalar('/critic/loss/policy_phase', loss_critic, self.update_step)
-        
+
         # https://arxiv.org/pdf/2009.04416.pdf algorithm 1, line 8-9
         loss_actor, l_clip, bc_loss = 0, 0, 0
         for i in range(self.policy_epoch):
             indices = np.arange(self.rollout_length)
             np.random.shuffle(indices)
             for start in range(0, self.rollout_length, self.batch_size):
-                idxes = indices[start:start + self.batch_size]                
+                idxes = indices[start:start + self.batch_size]
                 loss_actor, l_clip, bc_loss =  self.update_MultipleNet(state_batch[idxes], action_batch[idxes], log_pis_batch[idxes], advantages[idxes])
                 loss_actor += loss_actor
                 l_clip += l_clip
@@ -173,7 +173,7 @@ class PpgAgent:
         self.writer.add_scalar('/multiplenet/policy_phase/actor', loss_actor, self.update_step)
         self.writer.add_scalar('/multiplenet/policy_phase/l_clip', l_clip, self.update_step)
         self.writer.add_scalar('/multiplenet/policy_phase/bc_loss', bc_loss, self.update_step)
-                
+
         with torch.no_grad():
             log_pis_old = self.multipleNet.evaluate_log_pi(state_batch[:-1], action_batch)
 
@@ -197,12 +197,12 @@ class PpgAgent:
             # https://arxiv.org/pdf/2009.04416.pdf algorithm 1, line 2
             self.memory.reset()
 
-            # averaging losses and writeto tensorboard                    
+            # averaging losses and writeto tensorboard
             n_train_iteration = self.aux_num_updates * (self.rollout_length // self.batch_size)
             loss_critic_multi = loss_critic_multi / n_train_iteration
             bc_loss = bc_loss / n_train_iteration
             loss_joint = loss_joint / n_train_iteration
-            loss_critic_aux = loss_critic_aux / n_train_iteration            
+            loss_critic_aux = loss_critic_aux / n_train_iteration
             self.writer.add_scalar('/multiplenet/loss/auxialry_phase/critic', loss_critic_multi, self.update_step)
             self.writer.add_scalar('/multiplenet/loss/auxialry_phase/bc_loss', bc_loss, self.update_step)
             self.writer.add_scalar('/multiplenet/loss/auxialry_phase/loss_joint', loss_joint, self.update_step)
