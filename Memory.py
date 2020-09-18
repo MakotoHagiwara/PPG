@@ -9,8 +9,9 @@ class ReplayMemory:
         self.memory_size = memory_size
         self.batch_size = batch_size
         #場合によってはint型にしてメモリ使用量を削減してることもある
-        self.obs = np.zeros((self.memory_size, observation_space.shape[0], 84, 84), dtype = np.float)
-        if not is_image:
+        if is_image:
+            self.obs = np.zeros((self.memory_size, observation_space.shape[0], 84, 84), dtype = np.float)
+        else:
             self.obs = np.zeros((self.memory_size, num_state), dtype = np.float)
         self.actions = np.zeros((self.memory_size, action_space.shape[0]), dtype = np.float)
         self.log_pis = np.zeros((self.memory_size, action_space.shape[0]), dtype = np.float)
@@ -27,6 +28,9 @@ class ReplayMemory:
             self.state_halfwidth = 0.5*(observation_space.high - observation_space.low)
         self.is_image = is_image
         self.device = device
+        self.num_state = num_state
+        self.action_space = action_space
+        self.observation_space = observation_space
         
     def load_memory(self, path = 'ppo_memory.npz'):
         content = np.load(path)
@@ -48,6 +52,7 @@ class ReplayMemory:
     def add(self, obs, action, reward, terminate, log_pi):
         self.obs[self.index % self.memory_size] = obs
         self.actions[self.index % self.memory_size] = action
+        log_pi = log_pi.to('cpu').numpy()
         self.log_pis[self.index % self.memory_size] = log_pi
         #報酬と終端に関してはサイズ1の要素を格納している
         self.rewards[self.index % self.memory_size][0] = reward
@@ -81,3 +86,15 @@ class ReplayMemory:
     def update_priority(self, indices, priorities):
         self.priorities[indices] = np.minimum(np.power(priorities, self.alpha), 1.0)
 
+    def reset(self):
+        self.index = 0
+        if self.is_image:
+            self.obs = np.zeros((self.memory_size, self.observation_space.shape[0], 84, 84), dtype = np.float)
+        else:
+            self.obs = np.zeros((self.memory_size, self.num_state), dtype = np.float)
+        self.actions = np.zeros((self.memory_size, self.action_space.shape[0]), dtype = np.float)
+        self.log_pis = np.zeros((self.memory_size, self.action_space.shape[0]), dtype = np.float)
+        self.rewards = np.zeros((self.memory_size, 1), dtype = np.float)
+        #メモリ使用量削減のためにfloatではなくintで保存する
+        self.priorities = np.zeros((self.memory_size), dtype = np.float)
+        self.terminates = np.zeros((self.memory_size, 1), dtype = np.int)
