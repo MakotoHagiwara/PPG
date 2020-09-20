@@ -217,20 +217,15 @@ class PpgAgent:
         """
         loss_critic = (self.multipleNet.q_forward(states) - targets).pow_(2).mean() * 0.5
         log_pis = self.multipleNet.evaluate_log_pi(states, actions)
-        ratios = (log_pis - log_pis_old).exp_()
-        loss_a1 = -ratios * advantages
-        loss_a2 = -torch.clamp(
-            ratios,
-            1.0 - self.clip_eps,
-            1.0 + self.clip_eps
-        ) * advantages
-        loss_a = torch.max(loss_a1, loss_a2).mean()
-        loss_joint = loss_critic + self.beta_clone * loss_a
+        pis_old = log_pis_old.exp_()
+        kl_loss = (pis_old * (log_pis - log_pis_old)).mean()
+        
+        loss_joint = loss_critic + self.beta_clone * kl_loss
         self.multipleNet_optimizer.zero_grad()
         loss_joint.backward(retain_graph=False)
         self.multipleNet_optimizer.step()
         return loss_critic, self.beta_clone * loss_a, loss_joint
-
+        
     def update_critic_Auxiliary(self, states, targets):
         """loss = L^{value} = mse(v(s) - v_targ)
         """
