@@ -27,19 +27,23 @@ class PpgAgent:
             noise_clip=0.5,
             alpha=0.2,
             alpha_lr=3e-4,
-            rollout_length=256,
+            rollout_length=2048,
             lambda_=0.95,
             beta_clone=1.0,
             coef_ent=0.01,
             num_updates=32,
             policy_epoch=1,
             value_epoch=1,
-            aux_num_updates=1,
-            aux_epoch_batch=32,
+            aux_num_updates=6,
+            aux_epoch_batch=64,
             max_grad_norm=0.5,
+            aux_critic_loss_coef=1.0,
             clip_eps=0.2,
             writer=None,
             is_image=False,
+            clip_aux_critic_loss=None,
+            clip_aux_multinet_critic_loss=None,
+            multipleet_upadte_clip_grad_norm=None,
             summary_interval=1,
             debug_no_aux_phase=False):
         super(PpgAgent, self).__init__()
@@ -80,6 +84,7 @@ class PpgAgent:
         self.rollout_length = rollout_length
         self.lambda_ = lambda_
         self.coef_ent = coef_ent
+        self.aux_critic_loss_coef = aux_critic_loss_coef
         self.max_grad_norm = max_grad_norm
         self.aux_num_updates = aux_num_updates
         self.clip_eps = clip_eps
@@ -88,6 +93,9 @@ class PpgAgent:
         self.value_epoch = value_epoch
         self.num_updates = num_updates
         self.aux_epoch_batch = aux_epoch_batch
+        self.clip_aux_critic_loss = clip_aux_critic_loss
+        self.clip_aux_multinet_critic_loss = clip_aux_multinet_critic_loss
+        self.multipleet_upadte_clip_grad_norm = multipleet_upadte_clip_grad_norm
         self.summary_interval = summary_interval
         self.debug_no_aux_phase = debug_no_aux_phase
         self.update_step = 0
@@ -216,6 +224,9 @@ class PpgAgent:
         In original paper,  L^{aux} =  mse(v_{pi}(s_t), v_targ) \\ taks for V_{\theta_\pi}
         """
         loss_critic = (self.multipleNet.q_forward(states) - targets).pow_(2).mean() * 0.5
+        if self.clip_aux_multinet_critic_loss is not None:
+            loss_critic = torch.clamp(loss_critic, min=0, max=self.clip_aux_critic_loss)
+        loss_critic = self.aux_critic_loss_coef * loss_critic
         log_pis = self.multipleNet.evaluate_log_pi(states, actions)
         pis_old = log_pis_old.exp_()
         kl_loss = (pis_old * (log_pis - log_pis_old)).mean()
@@ -231,6 +242,8 @@ class PpgAgent:
         """
         # add * 0.5 according to https://arxiv.org/pdf/2009.04416.pdf page 2
         loss_critic_aux = (self.critic(states) - targets).pow_(2).mean() * 0.5
+        if self.clip_aux_critic_loss is not None:
+            loss_critic_aux = torch.clamp(loss_critic_aux, min=0, max=self.clip_aux_critic_loss)
         self.critic_optimizer.zero_grad()
         loss_critic_aux.backward(retain_graph=False)
         # nn.utils.clip_grad_norm_(self.critic.parameters(), self.max_grad_norm)
@@ -263,9 +276,11 @@ class PpgAgent:
         ) * advantages
         l_clip = torch.max(loss_actor1, loss_actor2).mean()
         bc_loss = self.coef_ent * mean_ent
-        loss_actor = l_clip + bc_loss
-        self.multipleNet_optimizer.zero_grad()
+        loss_actor = l_clip + bc_loss    
         loss_actor.backward(retain_graph=False)
+        if self.multipleet_upadte_clip_grad_norm is not None:
+            torch.nn.utils.clip_grad_norm(self.multipleNet.parameters(), 
+                                          self.multipleet_upadte_clip_grad_norm)
         #nn.utils.clip_grad_norm_(self.multipleNet.parameters(), self.max_grad_norm)
         self.multipleNet_optimizer.step()
         return loss_actor, l_clip, bc_loss
