@@ -235,7 +235,7 @@ class PpgAgent:
         self.multipleNet_optimizer.zero_grad()
         loss_joint.backward(retain_graph=False)
         self.multipleNet_optimizer.step()
-        return loss_critic, self.beta_clone * loss_a, loss_joint
+        return loss_critic, self.beta_clone * kl_loss, loss_joint
         
     def update_critic_Auxiliary(self, states, targets):
         """loss = L^{value} = mse(v(s) - v_targ)
